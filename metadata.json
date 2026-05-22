@@ -1,0 +1,6 @@
+{
+  "name": "Anees Creative Lab",
+  "description": "An ultra-modern, futuristic AI SaaS platform offering automated intelligence, automated business workflows, and interactive telemetry dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
