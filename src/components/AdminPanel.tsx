@@ -84,10 +84,42 @@ export default function AdminPanel() {
           ctx.drawImage(img, 0, 0, width, height);
           const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8); // 80% high-fidelity JPEG compression
           
+          // Helper to convert data URL to Blob synchronously without unreliable network fetches inside iframes
+          const dataURLtoBlob = (dataUrl: string) => {
+            try {
+              const arr = dataUrl.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+              }
+              return new Blob([u8arr], { type: mime });
+            } catch (error) {
+              console.error('Failed to convert dataURL to Blob:', error);
+              return null;
+            }
+          };
+
+          // If the user is in simulated mode or not authenticated via Firebase, fallback immediately to local base64
+          // to avoid unnecessary network penalty / latency and security permission blocks
+          if (!auth.currentUser) {
+            console.log("Simulated/Guest session: Using high-fidelity base64 container directly for instant load");
+            callback(compressedDataUrl);
+            setIsUploading(false);
+            setUploadProgress(100);
+            setTimeout(() => setUploadProgress(0), 1000);
+            triggerToast('Media loaded via instant Base64 compression', 'success');
+            return;
+          }
+
           try {
-            // Convert data URL to Blob for proper binary transmitting
-            const response = await fetch(compressedDataUrl);
-            const blob = await response.blob();
+            // Convert data URL to Blob synchronously and cleanly
+            const blob = dataURLtoBlob(compressedDataUrl);
+            if (!blob) {
+              throw new Error('Blob output is null');
+            }
             
             // Try uploading to Firebase Storage
             const { ref: sRef, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
@@ -128,7 +160,18 @@ export default function AdminPanel() {
           setIsUploading(false);
         }
       };
+      img.onerror = (err) => {
+        console.error("Image loader error on input canvas:", err);
+        callback(event.target?.result as string);
+        setIsUploading(false);
+        triggerToast('Raw image file loaded', 'info');
+      };
       img.src = event.target?.result as string;
+    };
+    reader.onerror = (err) => {
+      console.error("FileReader error on input stream:", err);
+      setIsUploading(false);
+      triggerToast('Error reading input file', 'error');
     };
     reader.readAsDataURL(file);
   };
