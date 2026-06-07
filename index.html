@@ -4,6 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Anees Creative Lab</title>
+    <script>
+      // Pre-emptive safety patch for sandboxed iframe environments (like Google AI Studio preview)
+      // to bypass "Uncaught TypeError: Cannot set property fetch of #<Window> which has only a getter"
+      (function() {
+        try {
+          let currentFetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get() {
+              return currentFetch;
+            },
+            set(val) {
+              currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (err) {
+          // Fallback if defineProperty fails due to high restrictions
+          console.warn("Pre-emptive fetch security descriptor bypass deferred:", err);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

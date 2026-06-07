@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, MapPin, Send, Github, Linkedin, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { saveContactMessage } from '../data/portfolioData';
 
 export default function Contact() {
   const [formName, setFormName] = useState('');
@@ -16,7 +17,7 @@ export default function Contact() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName || !formEmail || !formMessage) {
       setSubmitStatus('error');
@@ -26,24 +27,19 @@ export default function Contact() {
     setIsSubmitting(true);
     setSubmitStatus('idle');
 
-    // Simulate sending progress with high fidelity response
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSubmitStatus('success');
-      
-      // Save contact submission locally for portfolio fidelity validation
-      const submissions = JSON.parse(localStorage.getItem('aetheris_contact_messages') || '[]');
-      submissions.push({
-        id: Date.now(),
+    try {
+      // Save contact submission directly to Firebase Firestore
+      await saveContactMessage({
         name: formName,
         email: formEmail,
         subject: formSubject,
-        message: formMessage,
-        date: new Date().toISOString()
+        message: formMessage
       });
-      localStorage.setItem('aetheris_contact_messages', JSON.stringify(submissions));
 
-      // Reset
+      setIsSubmitting(false);
+      setSubmitStatus('success');
+
+      // Reset fields
       setFormName('');
       setFormEmail('');
       setFormSubject('');
@@ -53,7 +49,11 @@ export default function Contact() {
       setTimeout(() => {
         setSubmitStatus('idle');
       }, 5000);
-    }, 1500);
+    } catch (err) {
+      console.error('Contact submit error: ', err);
+      setIsSubmitting(false);
+      setSubmitStatus('error');
+    }
   };
 
   return (

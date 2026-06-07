@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "HeroData": {
+      "title": "HeroData",
+      "description": "Core layout details of the Hero and About sections.",
+      "type": "object",
+      "properties": {
+        "profileImage": { "type": "string", "description": "Base64 or external storage URL of the avatar" },
+        "name": { "type": "string", "description": "Profile display name" },
+        "title": { "type": "string", "description": "Primary job or engineering title" },
+        "subtitle": { "type": "string", "description": "Sub-title or division badge text" },
+        "tagline": { "type": "string", "description": "Catchy introductory bio sentence" },
+        "ctaTextPrimary": { "type": "string", "description": "Main button title" },
+        "ctaLinkPrimary": { "type": "string", "description": "Main button redirection link" },
+        "ctaTextSecondary": { "type": "string", "description": "Secondary button title" },
+        "ctaLinkSecondary": { "type": "string", "description": "Secondary button redirection link" },
+        "githubUrl": { "type": "string", "description": "GitHub profile links" },
+        "linkedinUrl": { "type": "string", "description": "LinkedIn profile link" },
+        "fiverrUrl": { "type": "string", "description": "Fiverr seller link" },
+        "bioText": { "type": "string", "description": "Detailed text within Biography segment" },
+        "experienceSummary": { "type": "string", "description": "Brief statistics context bubble" },
+        "shortIntroduction": { "type": "string", "description": "Editorial header for Bio section" }
+      },
+      "required": ["name", "title", "profileImage"]
+    },
+    "BrandingData": {
+      "title": "BrandingData",
+      "description": "Customizable branding and styling preferences for Aetheris.",
+      "type": "object",
+      "properties": {
+        "logoText": { "type": "string" },
+        "logoSubtext": { "type": "string" },
+        "logoImage": { "type": "string" },
+        "siteName": { "type": "string" },
+        "themePreset": { "type": "string" }
+      }
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A showcase project in the developer's portfolio.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "summary": { "type": "string" },
+        "technologies": { "type": "array" },
+        "category": { "type": "string" },
+        "liveUrl": { "type": "string" },
+        "githubUrl": { "type": "string" },
+        "screenshots": { "type": "array" },
+        "thumbnail": { "type": "string" },
+        "completionDate": { "type": "string" },
+        "status": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "tags": { "type": "array" },
+        "gradient": { "type": "string" },
+        "metrics": { "type": "array" },
+        "client": { "type": "string" },
+        "performanceScore": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "description", "category"]
+    },
+    "WorkExperience": {
+      "title": "WorkExperience",
+      "description": "Enterprise career roles and key achievements.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "company": { "type": "string" },
+        "role": { "type": "string" },
+        "duration": { "type": "string" },
+        "description": { "type": "string" },
+        "achievements": { "type": "array" }
+      },
+      "required": ["id", "company", "role", "duration"]
+    },
+    "Skill": {
+      "title": "Skill",
+      "description": "A developer capability or technology proficiency metric.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "proficiency": { "type": "number" }
+      },
+      "required": ["id", "name", "category", "proficiency"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Form submit messages representing direct client requests.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["name", "email", "message"]
+    }
+  },
+  "firestore": {
+    "/cms/hero": {
+      "schema": { "$ref": "#/entities/HeroData" },
+      "description": "Single record storing active hero configurations."
+    },
+    "/cms/branding": {
+      "schema": { "$ref": "#/entities/BrandingData" },
+      "description": "Single record storing brand logos, text, subtext, and layouts."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Dynamic layout showcase items."
+    },
+    "/experience/{experienceId}": {
+      "schema": { "$ref": "#/entities/WorkExperience" },
+      "description": "Chronological career history logs."
+    },
+    "/skills/{skillId}": {
+      "schema": { "$ref": "#/entities/Skill" },
+      "description": "Core software capability metrics list."
+    },
+    "/contactMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Direct submissions from potential leads."
+    }
+  }
+}

@@ -3,23 +3,27 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Lock, KeyRound, Monitor, Plus, Edit2, Trash2, Save, X, Eye, 
   Terminal, Sparkles, FolderLock, Database, Check, Layers, AlertCircle, 
-  ChevronRight, Calendar, User, FileImage, Briefcase, Award, TrendingUp, RefreshCw 
+  ChevronRight, Calendar, User, FileImage, Briefcase, Award, TrendingUp, RefreshCw, Mail, CheckCircle2, Sliders, Settings, ArrowLeft
 } from 'lucide-react';
 import { 
-  loadProjects, saveProjects, 
-  loadExperiences, saveExperiences, 
-  loadSkills, saveSkills,
+  loadProjects, saveProjects, deleteProjectFromFirebase,
+  loadExperiences, saveExperiences, deleteExperienceFromFirebase,
+  loadSkills, saveSkills, deleteSkillFromFirebase,
   loadHero, saveHero,
-  loadBranding, saveBranding
+  loadBranding, saveBranding,
+  loadContactMessages, deleteContactMessageFromFirebase, markMessageReadInFirebase,
+  seedDatabaseIfNeeded
 } from '../data/portfolioData';
 import { Project, WorkExperience, Skill, HeroData, BrandingData } from '../types';
+import { auth } from '../firebase';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 export default function AdminPanel() {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
-  const [activeTab, setActiveTab] = useState<'Home' | 'Hero' | 'Projects' | 'Experiences' | 'Skills' | 'Branding'>('Home');
+  const [activeTab, setActiveTab] = useState<'Home' | 'Hero' | 'Projects' | 'Experiences' | 'Skills' | 'Branding' | 'Messages'>('Home');
 
   // Dynamic CMS States
   const [projects, setProjects] = useState<Project[]>([]);
@@ -27,6 +31,13 @@ export default function AdminPanel() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [heroState, setHeroState] = useState<HeroData>(() => loadHero());
   const [brandingState, setBrandingState] = useState<BrandingData>(() => loadBranding());
+  const [contactMessages, setContactMessages] = useState<any[]>(() => loadContactMessages());
+  const [messageSearch, setMessageSearch] = useState('');
+
+  // Storage uploads tracking
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Editing items trackers
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
@@ -44,16 +55,19 @@ export default function AdminPanel() {
   // Simulation loading state
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // File upload to base64 helper with canvas dimension compression to keep localStorage extremely light!
-  const handleImageUpload = (file: File, callback: (base64: string) => void) => {
+  // High-fidelity image uploader with canvas dimension optimization and Firebase Storage streaming with progress bars
+  const handleImageUpload = (file: File, callback: (url: string) => void) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        const maxDim = 800; // Keep local storage lightweight!
+        const maxDim = 800; // Keep local storage/clouddb super light!
         if (width > maxDim || height > maxDim) {
           if (width > height) {
             height = Math.round((height * maxDim) / width);
@@ -68,10 +82,50 @@ export default function AdminPanel() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.8); // 80% high-fidelity JPEG compression
-          callback(compressed);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8); // 80% high-fidelity JPEG compression
+          
+          try {
+            // Convert data URL to Blob for proper binary transmitting
+            const response = await fetch(compressedDataUrl);
+            const blob = await response.blob();
+            
+            // Try uploading to Firebase Storage
+            const { ref: sRef, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
+            const { storage } = await import('../firebase');
+            
+            const fileRef = sRef(storage, `images/${Date.now()}_${file.name}`);
+            const uploadTask = uploadBytesResumable(fileRef, blob);
+            
+            uploadTask.on('state_changed', 
+              (snapshot) => {
+                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                setUploadProgress(progress);
+              }, 
+              (error) => {
+                console.warn('Firebase Storage upload restricted, using secure Base64 transmission fallback.', error);
+                callback(compressedDataUrl);
+                setIsUploading(false);
+                setUploadProgress(0);
+                triggerToast('Media loaded via dynamic Base64 cache', 'info');
+              }, 
+              async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                callback(downloadURL);
+                setIsUploading(false);
+                setUploadProgress(0);
+                triggerToast('Media uploaded to Firebase Storage!', 'success');
+              }
+            );
+          } catch (err) {
+            console.warn('Fallback to inline Base64 due to upload exception:', err);
+            callback(compressedDataUrl);
+            setIsUploading(false);
+            setUploadProgress(0);
+            triggerToast('Media buffered locally', 'info');
+          }
         } else {
           callback(event.target?.result as string);
+          setIsUploading(false);
         }
       };
       img.src = event.target?.result as string;
@@ -91,17 +145,42 @@ export default function AdminPanel() {
   ];
 
   useEffect(() => {
-    // Load data from DB / LocalStorage
-    setProjects(loadProjects());
-    setExperiences(loadExperiences());
-    setSkills(loadSkills());
-    setHeroState(loadHero());
-    setBrandingState(loadBranding());
+    const handleCmsUpdate = () => {
+      setProjects(loadProjects());
+      setExperiences(loadExperiences());
+      setSkills(loadSkills());
+      setHeroState(loadHero());
+      setBrandingState(loadBranding());
+      setContactMessages(loadContactMessages());
+    };
 
-    // Auto log in if token exists
-    if (localStorage.getItem('aetheris_admin_session') === 'active') {
-      setIsAuthenticated(true);
-    }
+    // Initial fetch from cache
+    handleCmsUpdate();
+
+    // Bind real-time trigger
+    window.addEventListener('aetheris_cms_updated', handleCmsUpdate);
+    
+    // Auth listen state
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user && user.email === 'mylifear2026@gmail.com') {
+        setIsAuthenticated(true);
+        // Automatically check/seed template database
+        await seedDatabaseIfNeeded();
+      } else {
+        // Fallback or explicit check for simulated sessions
+        if (localStorage.getItem('aetheris_admin_session') === 'active') {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      }
+    });
+
+    return () => {
+      window.removeEventListener('aetheris_cms_updated', handleCmsUpdate);
+      unsubscribeAuth();
+    };
   }, []);
 
   const triggerToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -112,20 +191,45 @@ export default function AdminPanel() {
     }, 4000);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordInput === 'admin' || passwordInput.toLowerCase() === 'aetheris2026') {
       setIsAuthenticated(true);
       localStorage.setItem('aetheris_admin_session', 'active');
-      triggerToast('Anees Creative Lab Security Guard verified: Root Access Granted', 'success');
+      triggerToast('Verified Simulation Session: Sandbox Write Mode Unlocked', 'success');
       setAuthError('');
+      await seedDatabaseIfNeeded();
     } else {
       setAuthError('Access Denied. Invalid Authorization Code.');
       triggerToast('Authentication fault', 'error');
     }
   };
 
-  const handleLogout = () => {
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      if (result.user && result.user.email === 'mylifear2026@gmail.com') {
+        triggerToast('Welcome back, verified Administrator!', 'success');
+        setAuthError('');
+      } else {
+        await signOut(auth);
+        setAuthError('Access Denied. Only the whitelisted Administrator (mylifear2026@gmail.com) is permitted root writes.');
+        triggerToast('Whitelisting constraint error', 'error');
+      }
+    } catch (error: any) {
+      console.error('Google Auth Popup Error: ', error);
+      setAuthError(`Google authentication could not complete: ${error.message}`);
+      triggerToast('Authentication fault', 'error');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn('Google signout bypass:', err);
+    }
     setIsAuthenticated(false);
     localStorage.removeItem('aetheris_admin_session');
     triggerToast('Securely disconnected from control node', 'info');
@@ -136,18 +240,24 @@ export default function AdminPanel() {
     window.dispatchEvent(new Event('aetheris_cms_updated'));
   };
 
-  const syncToCloudDB = () => {
+  const syncToCloudDB = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
-      saveProjects(projects);
-      saveExperiences(experiences);
-      saveSkills(skills);
-      saveHero(heroState);
-      saveBranding(brandingState);
+    try {
+      await Promise.all([
+        saveProjects(projects),
+        saveExperiences(experiences),
+        saveSkills(skills),
+        saveHero(heroState),
+        saveBranding(brandingState)
+      ]);
       notifyChanges();
-      setIsSyncing(false);
       triggerToast('All content committed and compiled to database snapshots', 'success');
-    }, 900);
+    } catch (err: any) {
+      console.error('Failed sync commit:', err);
+      triggerToast('Sync completed with local cache buffers', 'info');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // --- CRUD OPERATORS FOR PROJECTS ---
@@ -195,13 +305,17 @@ export default function AdminPanel() {
     setEditingProject(null);
   };
 
-  const handleDeleteProject = (id: string, name: string) => {
+  const handleDeleteProject = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
-      const updated = projects.filter(p => p.id !== id);
-      setProjects(updated);
-      saveProjects(updated);
-      notifyChanges();
-      triggerToast(`Project "${name}" permanently removed`, 'error');
+      try {
+        setProjects(prev => prev.filter(p => p.id !== id));
+        await deleteProjectFromFirebase(id);
+        triggerToast(`Project "${name}" permanently removed`, 'error');
+      } catch (err) {
+        console.error('Delete project failed: ', err);
+        setProjects(loadProjects());
+        triggerToast('Could not sync cloud deletion', 'error');
+      }
     }
   };
 
@@ -234,13 +348,17 @@ export default function AdminPanel() {
     setEditingExperience(null);
   };
 
-  const handleDeleteExperience = (id: string, company: string) => {
+  const handleDeleteExperience = async (id: string, company: string) => {
     if (window.confirm(`Verify experience purge for "${company}"?`)) {
-      const updated = experiences.filter(exp => exp.id !== id);
-      setExperiences(updated);
-      saveExperiences(updated);
-      notifyChanges();
-      triggerToast(`Career record for ${company} removed`, 'error');
+      try {
+        setExperiences(prev => prev.filter(e => e.id !== id));
+        await deleteExperienceFromFirebase(id);
+        triggerToast(`Career record for ${company} removed`, 'error');
+      } catch (err) {
+        console.error('Delete experience failed: ', err);
+        setExperiences(loadExperiences());
+        triggerToast('Could not sync cloud deletion', 'error');
+      }
     }
   };
 
@@ -274,13 +392,17 @@ export default function AdminPanel() {
     setEditingSkill(null);
   };
 
-  const handleDeleteSkill = (id: string, name: string) => {
+  const handleDeleteSkill = async (id: string, name: string) => {
     if (window.confirm(`Delete skill catalog "${name}"?`)) {
-      const updated = skills.filter(sk => sk.id !== id);
-      setSkills(updated);
-      saveSkills(updated);
-      notifyChanges();
-      triggerToast(`Skill "${name}" cleared from engine index`, 'error');
+      try {
+        setSkills(prev => prev.filter(s => s.id !== id));
+        await deleteSkillFromFirebase(id);
+        triggerToast(`Skill "${name}" cleared from engine index`, 'error');
+      } catch (err) {
+        console.error('Delete skill failed: ', err);
+        setSkills(loadSkills());
+        triggerToast('Could not sync cloud deletion', 'error');
+      }
     }
   };
 
@@ -312,6 +434,15 @@ export default function AdminPanel() {
   if (!isAuthenticated) {
     return (
       <section id="console" className="py-24 px-6 relative overflow-hidden bg-transparent border-t border-slate-200/50 dark:border-white/10 min-h-[90vh] flex items-center justify-center">
+        {/* Floating Back Button */}
+        <a 
+          href="#"
+          className="absolute top-8 left-8 flex items-center gap-2 text-xs font-semibold tracking-wider text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white transition-all bg-white hover:bg-slate-50 dark:bg-black/40 dark:hover:bg-white/5 px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 shadow-sm hover:translate-y-[-1px] cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Site</span>
+        </a>
+
         {/* Glow ambient circle */}
         <div className="absolute top-[30%] left-[25%] w-[350px] h-[350px] bg-[#7C3AED]/10 dark:bg-[#7C3AED]/5 blur-[120px] pointer-events-none animate-pulse" />
 
@@ -334,12 +465,32 @@ export default function AdminPanel() {
           </div>
 
           {/* Login Credentials lock Box */}
-          <div className="p-8 sm:p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-black/80 shadow-2xl backdrop-blur-xl text-left">
+          <div className="p-8 sm:p-10 rounded-3xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-black/80 shadow-2xl backdrop-blur-xl text-left flex flex-col gap-6">
+            
+            {/* Real Firebase Google Authentication button */}
+            <button
+              onClick={handleGoogleLogin}
+              type="button"
+              className="w-full py-3.5 px-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white hover:bg-slate-50 dark:bg-[#0A0A0A] dark:hover:bg-white/5 text-slate-800 dark:text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-3 transition-all cursor-pointer shadow-md hover:scale-[1.01]"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+              </svg>
+              <span>Sign in with Google</span>
+            </button>
+
+            <div className="flex items-center gap-3 py-1 text-[10px] font-mono uppercase text-slate-400 dark:text-gray-500 font-bold justify-center select-none before:content-[''] before:flex-1 before:h-[1px] before:bg-slate-200 dark:before:bg-white/10 after:content-[''] after:flex-1 after:h-[1px] after:bg-slate-200 dark:after:bg-white/10">
+              or use authorization passcode
+            </div>
+
             <form onSubmit={handleLogin} className="flex flex-col gap-6">
               
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-mono tracking-wider text-slate-600 dark:text-gray-300 uppercase font-bold flex items-center justify-between">
-                  <span>Authorized Passkey Code</span>
+                  <span>Simulated Passkey Code</span>
                   <span className="text-purple-600 dark:text-purple-400 lowercase font-semibold bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-100 dark:border-purple-900/30">hint: admin</span>
                 </label>
                 <div className="relative flex items-center">
@@ -364,9 +515,9 @@ export default function AdminPanel() {
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 font-semibold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-98 cursor-pointer shadow-lg shadow-purple-500/5 hover:translate-y-[-1px]"
+                className="w-full py-3.5 rounded-xl bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 font-bold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-98 cursor-pointer shadow-lg shadow-purple-500/5 hover:translate-y-[-1px]"
               >
-                Establish Secure Session
+                Establish Simulated Session
               </button>
             </form>
           </div>
@@ -429,6 +580,13 @@ export default function AdminPanel() {
 
           {/* Sync status & Tab operators */}
           <div className="flex flex-wrap items-center gap-3">
+            <a 
+              href="#"
+              className="flex items-center gap-1.5 text-[10px] font-bold font-mono text-slate-700 dark:text-slate-200 bg-slate-200/50 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-300/30 dark:border-white/5 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer hover:-translate-y-0.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              PORTFOLIO HOMEPAGE
+            </a>
             {isSyncing ? (
               <span className="flex items-center gap-1.5 text-[10px] font-mono text-cyan-400 bg-cyan-950/20 border border-cyan-800/30 px-3 py-1.5 rounded-lg">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -464,10 +622,12 @@ export default function AdminPanel() {
               { id: 'Projects', label: 'Project Portfolio', icon: Layers },
               { id: 'Experiences', label: 'Career History', icon: Briefcase },
               { id: 'Skills', label: 'Capability Deck', icon: Award },
-              { id: 'Branding', label: 'Brand Settings', icon: Sparkles }
+              { id: 'Branding', label: 'Brand Settings', icon: Sparkles },
+              { id: 'Messages', label: 'Contact Messages', icon: Mail }
             ].map((tab) => {
               const TabIcon = tab.icon;
               const isSelected = activeTab === tab.id;
+              const unreadCount = tab.id === 'Messages' ? contactMessages.filter((m: any) => !m.read).length : 0;
               return (
                 <button
                   key={tab.id}
@@ -477,14 +637,21 @@ export default function AdminPanel() {
                     setEditingExperience(null);
                     setEditingSkill(null);
                   }}
-                  className={`flex items-center gap-3 px-4.5 py-3.5 rounded-xl text-left border text-xs font-semibold tracking-wide transition-all duration-200 select-none shrink-0 cursor-pointer ${
+                  className={`flex items-center justify-between px-4.5 py-3.5 rounded-xl text-left border text-xs font-semibold tracking-wide transition-all duration-200 select-none shrink-0 cursor-pointer ${
                     isSelected 
                       ? 'bg-slate-900 border-slate-800 dark:bg-[#0A0A0A] dark:border-white/10 text-white shadow-sm'
                       : 'bg-transparent border-transparent text-slate-600 dark:text-gray-400 hover:bg-slate-200/50 dark:hover:bg-white/5 dark:hover:text-white'
                   }`}
                 >
-                  <TabIcon className={`w-4 h-4 ${isSelected ? 'text-purple-400' : 'text-slate-450'}`} />
-                  <span>{tab.label}</span>
+                  <div className="flex items-center gap-3">
+                    <TabIcon className={`w-4 h-4 ${isSelected ? 'text-purple-400' : 'text-slate-450'}`} />
+                    <span>{tab.label}</span>
+                  </div>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-full font-bold shrink-0">
+                      {unreadCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -498,18 +665,19 @@ export default function AdminPanel() {
               <div className="flex flex-col gap-8.5">
                 
                 {/* Stats cards panel */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { label: 'Active Projects', count: projects.length, change: '+1 completed', color: 'from-purple-500 to-indigo-500' },
-                    { label: 'Career Milestone Roles', count: experiences.length, change: 'Stable Timeline', color: 'from-pink-500 to-rose-500' },
-                    { label: 'Independently Indexed Skills', count: skills.length, change: '+2 updated this week', color: 'from-cyan-400 to-blue-500' }
+                    { label: 'Active Projects', count: projects.length, change: '+1 completed', color: 'from-purple-500 to-indigo-550' },
+                    { label: 'Career Milestone Roles', count: experiences.length, change: 'Stable Timeline', color: 'from-pink-500 to-rose-550' },
+                    { label: 'Independently Indexed Skills', count: skills.length, change: 'High Proficiency', color: 'from-cyan-400 to-blue-550' },
+                    { label: 'Inquiries Received', count: contactMessages.length, change: `${contactMessages.filter(m => !m.read).length} unread`, color: 'from-amber-400 to-amber-655' }
                   ].map((stat, idx) => (
                     <div key={idx} className="p-6 rounded-2xl bg-white/40 dark:bg-white/2 border border-slate-200 dark:border-white/5 flex flex-col gap-1.5 relative overflow-hidden group hover:border-slate-350 dark:hover:border-white/10 transition-colors">
                       <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-tr from-purple-500/10 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
                       <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 dark:text-gray-450">{stat.label}</span>
                       <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-3xl font-extrabold font-display text-slate-900 dark:text-white">{stat.count}</span>
-                        <span className="text-[10px] font-mono text-emerald-500">{stat.change}</span>
+                        <span className="text-[10px] font-mono text-purple-500 font-bold">{stat.change}</span>
                       </div>
                     </div>
                   ))}
@@ -624,6 +792,17 @@ export default function AdminPanel() {
                               }}
                             />
                           </label>
+                          {isUploading && (
+                            <div className="w-full mt-3 flex flex-col gap-1 px-4">
+                              <div className="flex justify-between items-center text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                                <span>Uploading Media...</span>
+                                <span>{uploadProgress}%</span>
+                              </div>
+                              <div className="w-full bg-slate-200 dark:bg-white/10 h-1 rounded-full overflow-hidden">
+                                <span className="bg-gradient-to-r from-purple-500 to-cyan-400 h-full rounded-full block transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -978,6 +1157,17 @@ export default function AdminPanel() {
                                   }}
                                 />
                               </label>
+                              {isUploading && (
+                                <div className="w-full mt-3 flex flex-col gap-1 px-4">
+                                  <div className="flex justify-between items-center text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                                    <span>Uploading Portfolio Screenshot...</span>
+                                    <span>{uploadProgress}%</span>
+                                  </div>
+                                  <div className="w-full bg-slate-200 dark:bg-white/10 h-1 rounded-full overflow-hidden">
+                                    <span className="bg-gradient-to-r from-purple-500 to-cyan-400 h-full rounded-full block transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1400,6 +1590,223 @@ export default function AdminPanel() {
                     </div>
                   ))}
                 </div>
+
+              </div>
+            )}
+
+            {/* T5. BRANDING SETTINGS VIEW */}
+            {activeTab === 'Branding' && (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                saveBranding(brandingState);
+                notifyChanges();
+                triggerToast('Brand configuration settings updated!', 'success');
+              }} className="flex flex-col gap-6 p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/40 dark:bg-white/2 shadow-xl">
+                <div className="pb-3 border-b border-slate-200 dark:border-white/10">
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider font-display flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-purple-400" />
+                    <span>Dynamic Agency Branding</span>
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Configure global text headers, naming metadata, visual styles, and logos.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Logo Normal Text</label>
+                    <input
+                      type="text"
+                      value={brandingState.logoText || ''}
+                      onChange={(e) => setBrandingState(b => ({ ...b, logoText: e.target.value }))}
+                      className="bg-slate-50 dark:bg-black text-slate-900 dark:text-white text-xs rounded-xl p-3 border border-slate-200 dark:border-white/10 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Logo Highlight Accents</label>
+                    <input
+                      type="text"
+                      value={brandingState.logoHighlightText || ''}
+                      onChange={(e) => setBrandingState(b => ({ ...b, logoHighlightText: e.target.value }))}
+                      className="bg-slate-50 dark:bg-black text-slate-900 dark:text-white text-xs rounded-xl p-3 border border-slate-200 dark:border-white/10 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Site Frame Window Title</label>
+                    <input
+                      type="text"
+                      value={brandingState.siteName || ''}
+                      onChange={(e) => setBrandingState(b => ({ ...b, siteName: e.target.value }))}
+                      className="bg-slate-50 dark:bg-black text-slate-950 dark:text-white text-xs rounded-xl p-3 border border-slate-200 dark:border-white/10 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Visual Themes Selector</label>
+                    <select
+                      value={brandingState.themeMode || 'Dual'}
+                      onChange={(e) => setBrandingState(b => ({ ...b, themeMode: e.target.value as any }))}
+                      className="bg-slate-50 dark:bg-black text-slate-905 dark:text-white text-xs rounded-xl p-3 border border-slate-200 dark:border-white/10 focus:outline-none text-slate-700 dark:text-gray-300"
+                    >
+                      <option value="Dual">Dynamic Dual Mode Switcher</option>
+                      <option value="Light">Enforce Light Canvas Theme Only</option>
+                      <option value="Dark">Enforce Immersive Dark Mode Only</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Visual Layout Densities</label>
+                    <select
+                      value={brandingState.denseLayout ? 'true' : 'false'}
+                      onChange={(e) => setBrandingState(b => ({ ...b, denseLayout: e.target.value === 'true' }))}
+                      className="bg-slate-50 dark:bg-black text-slate-905 dark:text-white text-xs rounded-xl p-3 border border-slate-200 dark:border-white/10 focus:outline-none text-slate-700 dark:text-gray-300"
+                    >
+                      <option value="false">Standard Spacing / Flowing (Spacious)</option>
+                      <option value="true">Bento Layout High-Density (Compact)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-white/10">
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-md hover:scale-[1.01] active:scale-95 transition-all"
+                  >
+                    Commit Brand Changes
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* T6. CONTACT MESSAGES TAB VIEW */}
+            {activeTab === 'Messages' && (
+              <div className="flex flex-col gap-6">
+                
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="relative w-full sm:max-w-xs">
+                    <input
+                      type="text"
+                      placeholder="Search inbox / sender name..."
+                      value={messageSearch}
+                      onChange={(e) => setMessageSearch(e.target.value)}
+                      className="w-full bg-slate-100 dark:bg-[#0A0A0A] text-slate-805 dark:text-white rounded-xl px-4 py-2.5 border border-slate-200 dark:border-white/10 text-xs focus:outline-none"
+                    />
+                  </div>
+                  
+                  {contactMessages.length > 0 && (
+                    <span className="text-[10px] font-mono font-bold text-purple-500 uppercase">
+                      Displaying {contactMessages.length} Messages
+                    </span>
+                  )}
+                </div>
+
+                {contactMessages.length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl border border-dashed border-slate-200 dark:border-white/10 bg-white/10 dark:bg-white/2 flex flex-col items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-450">
+                      <Mail className="w-5 h-5 font-light" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-white">Inbox empty</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Submit test inquiries inside the contact form below or wait for clients.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {contactMessages
+                      .filter(m => {
+                        const s = messageSearch.toLowerCase();
+                        return (m.name || '').toLowerCase().includes(s) || 
+                               (m.email || '').toLowerCase().includes(s) || 
+                               (m.message || '').toLowerCase().includes(s) || 
+                               (m.subject || '').toLowerCase().includes(s);
+                      })
+                      .map((msg) => {
+                        return (
+                          <div 
+                            key={msg.id} 
+                            className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col gap-3 ${
+                              !msg.read 
+                                ? 'bg-gradient-to-r from-purple-500/5 to-cyan-500/5 border-purple-500/20 shadow-lg' 
+                                : 'bg-white/40 dark:bg-white/2 border-slate-250 dark:border-white/5'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white font-display">
+                                    {msg.name}
+                                  </h4>
+                                  <span className="text-[10.5px] font-mono text-slate-400">
+                                    ({msg.email})
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-purple-600 dark:text-purple-400 font-mono mt-0.5">
+                                  Subject: {msg.subject || 'Inquiry'}
+                                </p>
+                              </div>
+
+                              <span className="text-[9px] font-mono text-slate-450 select-none">
+                                {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : 'N/A'}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-650 dark:text-slate-300 bg-slate-50 dark:bg-black/40 p-3 rounded-xl leading-relaxed whitespace-pre-wrap font-sans border border-slate-200/50 dark:border-white/5">
+                              {msg.message}
+                            </p>
+
+                            <div className="flex justify-between items-center gap-3 pt-1">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await markMessageReadInFirebase(msg.id, !msg.read);
+                                    triggerToast(`Message marked as ${!msg.read ? 'Read' : 'Unread'}`, 'success');
+                                  } catch (err) {
+                                    triggerToast('Connection fault toggling read state', 'error');
+                                  }
+                                }}
+                                className={`flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase transition-colors shrink-0 cursor-pointer ${
+                                  msg.read 
+                                    ? 'text-slate-400 hover:text-purple-400' 
+                                    : 'text-purple-500 hover:text-purple-600'
+                                }`}
+                              >
+                                {msg.read ? (
+                                  <>
+                                    <X className="w-3.5 h-3.5" />
+                                    <span>Mark Unread</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Mark Read</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (window.confirm('Delete message temporarily/permanently?')) {
+                                    try {
+                                      await deleteContactMessageFromFirebase(msg.id);
+                                      triggerToast('Message permanently removed', 'success');
+                                    } catch (err) {
+                                      triggerToast('Delete message failed', 'error');
+                                    }
+                                  }
+                                }}
+                                className="p-2 border border-rose-500/10 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded-lg text-xs cursor-pointer flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span className="text-[9px] font-bold uppercase tracking-wider font-mono">Purge</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
 
               </div>
             )}

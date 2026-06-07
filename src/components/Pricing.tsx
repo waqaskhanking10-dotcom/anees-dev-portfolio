@@ -131,7 +131,7 @@ export default function Pricing() {
                 {/* Card CTA element */}
                 <div className="mt-auto">
                   <a
-                    href="#console"
+                    href="#admin"
                     className={`group w-full py-4.5 rounded-xl text-center text-xs font-semibold tracking-wider uppercase block border transition-all duration-300 hover:scale-[1.02] cursor-pointer ${
                       plan.popular
                         ? 'bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 border-transparent shadow-lg text-xs'

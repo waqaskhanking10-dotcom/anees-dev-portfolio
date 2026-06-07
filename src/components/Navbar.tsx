@@ -38,7 +38,7 @@ export default function Navbar() {
     { name: 'Journey & Skills', href: '#experience' },
     { name: 'FAQ', href: '#faq' },
     { name: 'Contact', href: '#contact' },
-    { name: 'CMS Admin', href: '#console' },
+    { name: 'CMS Admin', href: '#admin' },
   ];
 
   return (
@@ -106,7 +106,7 @@ export default function Navbar() {
 
             {/* Launch App CTA */}
             <a
-              href="#console"
+              href="#admin"
               className="group relative inline-flex items-center gap-1 px-5 py-2.5 rounded-xl text-xs font-semibold tracking-wide text-white bg-slate-950 dark:bg-white dark:text-slate-950 overflow-hidden shadow-lg transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -165,7 +165,7 @@ export default function Navbar() {
             </div>
             <div className="h-px bg-slate-200 dark:bg-white/10 my-1" />
             <a
-              href="#console"
+              href="#admin"
               onClick={() => setMobileMenuOpen(false)}
               className="py-3.5 px-4 rounded-xl text-center text-sm font-semibold text-white bg-slate-950 dark:bg-white dark:text-slate-950 shadow-md flex items-center justify-center gap-2"
             >

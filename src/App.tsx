@@ -73,6 +73,38 @@ function MainLayout() {
 }
 
 export default function App() {
+  const [route, setRoute] = useState(window.location.hash || window.location.pathname);
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setRoute(window.location.hash || window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  const isAdminRoute = 
+    route === '#admin' || 
+    route === '#/admin' || 
+    route === '/admin' || 
+    route.startsWith('/admin') || 
+    route.startsWith('#admin') || 
+    route === '#console';
+
+  if (isAdminRoute) {
+    return (
+      <ThemeProvider>
+        <AdminPanel />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <MainLayout />

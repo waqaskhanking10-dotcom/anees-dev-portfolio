@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety gate
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // High-fidelity standard utilities
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == "mylifear2026@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // ------------------------------------------------------------------------
+    // /cms/ configuration matches (hero & branding)
+    // ------------------------------------------------------------------------
+    match /cms/{configId} {
+      // Direct single reads are public (used to load hero/branding).
+      allow get: if configId in ['hero', 'branding'];
+      allow list: if false; // Deny broad queries or recursive scraping on CMS records
+      
+      // Restrict writes exclusively to vetted admin
+      allow create, update: if isAdmin() && isValidId(configId) && (
+        (configId == 'hero' && isValidHero(request.resource.data)) ||
+        (configId == 'branding' && isValidBranding(request.resource.data))
+      );
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    function isValidHero(data) {
+      return data.keys().hasAll(['name', 'title', 'profileImage']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.profileImage is string && data.profileImage.size() <= 2000000; // supports direct short images or base64
+    }
+
+    function isValidBranding(data) {
+      return data.keys().hasAll(['logoText', 'logoSubtext', 'siteName']) &&
+             data.logoText is string && data.logoText.size() <= 50 &&
+             data.logoSubtext is string && data.logoSubtext.size() <= 50 &&
+             data.siteName is string && data.siteName.size() <= 100;
+    }
+
+    // ------------------------------------------------------------------------
+    // /projects collection
+    // ------------------------------------------------------------------------
+    match /projects/{projectId} {
+      // Anyone can read single projects or query list
+      allow read: if true;
+      
+      // Admin only write
+      allow create: if isAdmin() && isValidId(projectId) && isValidProject(request.resource.data) && request.resource.data.id == projectId;
+      allow update: if isAdmin() && isValidId(projectId) && isValidProject(request.resource.data);
+      allow delete: if isAdmin() && isValidId(projectId);
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'category']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.category is string && data.category.size() <= 128;
+    }
+
+    // ------------------------------------------------------------------------
+    // /experience collection
+    // ------------------------------------------------------------------------
+    match /experience/{experienceId} {
+      allow read: if true;
+      
+      allow create: if isAdmin() && isValidId(experienceId) && isValidExperience(request.resource.data) && request.resource.data.id == experienceId;
+      allow update: if isAdmin() && isValidId(experienceId) && isValidExperience(request.resource.data);
+      allow delete: if isAdmin() && isValidId(experienceId);
+    }
+
+    function isValidExperience(data) {
+      return data.keys().hasAll(['id', 'company', 'role', 'duration']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.company is string && data.company.size() > 0 && data.company.size() <= 200 &&
+             data.role is string && data.role.size() > 0 && data.role.size() <= 200 &&
+             data.duration is string && data.duration.size() > 0 && data.duration.size() <= 100;
+    }
+
+    // ------------------------------------------------------------------------
+    // /skills collection
+    // ------------------------------------------------------------------------
+    match /skills/{skillId} {
+      allow read: if true;
+      
+      allow create: if isAdmin() && isValidId(skillId) && isValidSkill(request.resource.data) && request.resource.data.id == skillId;
+      allow update: if isAdmin() && isValidId(skillId) && isValidSkill(request.resource.data);
+      allow delete: if isAdmin() && isValidId(skillId);
+    }
+
+    function isValidSkill(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'proficiency']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.proficiency is number && data.proficiency >= 0 && data.proficiency <= 100;
+    }
+
+    // ------------------------------------------------------------------------
+    // /contactMessages collection
+    // ------------------------------------------------------------------------
+    match /contactMessages/{messageId} {
+      // Public submissions allowed: anyone can create.
+      allow create: if isValidId(messageId) && isValidContactMessage(request.resource.data);
+      
+      // Admin only: read list/get, update read/unread, delete spam
+      allow get, list, update, delete: if isAdmin() && isValidId(messageId);
+    }
+
+    function isValidContactMessage(data) {
+      return data.keys().hasAll(['name', 'email', 'message', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 128 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 10000 &&
+             data.createdAt is timestamp;
+    }
+  }
+}
