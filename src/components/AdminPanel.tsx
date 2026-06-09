@@ -38,6 +38,7 @@ export default function AdminPanel() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMode, setUploadMode] = useState<'base64' | 'storage'>('base64');
 
   // Editing items trackers
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
@@ -102,15 +103,14 @@ export default function AdminPanel() {
             }
           };
 
-          // If the user is in simulated mode or not authenticated via Firebase, fallback immediately to local base64
-          // to avoid unnecessary network penalty / latency and security permission blocks
-          if (!auth.currentUser) {
-            console.log("Simulated/Guest session: Using high-fidelity base64 container directly for instant load");
+          // If in instant Base64 mode, guest simulated mode, or not logged in, bypass cloud storage block completely
+          if (!auth.currentUser || uploadMode === 'base64') {
+            console.log("Using instant high-fidelity Base64 compression directly for absolute reliability");
             callback(compressedDataUrl);
             setIsUploading(false);
             setUploadProgress(100);
             setTimeout(() => setUploadProgress(0), 1000);
-            triggerToast('Media loaded via instant Base64 compression', 'success');
+            triggerToast('Image loaded instantly via high-fidelity Base64!', 'success');
             return;
           }
 
@@ -128,19 +128,36 @@ export default function AdminPanel() {
             const fileRef = sRef(storage, `images/${Date.now()}_${file.name}`);
             const uploadTask = uploadBytesResumable(fileRef, blob);
             
+            // Start a 4-second safety timeout to prevent hanging uploads if Storage core is not provisioned or blocked
+            const uploadTimeout = setTimeout(() => {
+              console.warn("Firebase Storage delayed or not provisioned on this tier. Automatically routing to high-fidelity Base64 fallback.");
+              try {
+                uploadTask.cancel();
+              } catch (e) {}
+              callback(compressedDataUrl);
+              setIsUploading(false);
+              setUploadProgress(0);
+              triggerToast('Storage delayed or unprovisioned - used instant Base64 fallback', 'info');
+            }, 4000);
+
             uploadTask.on('state_changed', 
               (snapshot) => {
                 const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
                 setUploadProgress(progress);
               }, 
               (error) => {
+                clearTimeout(uploadTimeout);
+                // If cancelled by our safety timeout, ignore since handled
+                if (error.code === 'storage/canceled') return;
+
                 console.warn('Firebase Storage upload restricted, using secure Base64 transmission fallback.', error);
                 callback(compressedDataUrl);
                 setIsUploading(false);
                 setUploadProgress(0);
-                triggerToast('Media loaded via dynamic Base64 cache', 'info');
+                triggerToast('Media loaded via instant Base64 fallback', 'info');
               }, 
               async () => {
+                clearTimeout(uploadTimeout);
                 const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                 callback(downloadURL);
                 setIsUploading(false);
@@ -153,7 +170,7 @@ export default function AdminPanel() {
             callback(compressedDataUrl);
             setIsUploading(false);
             setUploadProgress(0);
-            triggerToast('Media buffered locally', 'info');
+            triggerToast('Media loaded via instant Base64 fallback', 'info');
           }
         } else {
           callback(event.target?.result as string);
@@ -907,7 +924,21 @@ export default function AdminPanel() {
                       </div>
 
                       {/* Drop uploader info */}
-                      <div className="flex-1 w-full text-center sm:text-left">
+                      <div className="flex-1 w-full text-center sm:text-left flex flex-col gap-2.5">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 border-b border-slate-200 dark:border-white/5 pb-2">
+                          <label className="flex items-center gap-1.5 text-[9px] font-mono font-bold uppercase cursor-pointer select-none text-slate-600 dark:text-slate-300">
+                            <input 
+                              type="checkbox"
+                              checked={uploadMode === 'base64'}
+                              onChange={(e) => setUploadMode(e.target.checked ? 'base64' : 'storage')}
+                              className="rounded border-slate-300 dark:border-white/10 text-purple-600 focus:ring-purple-500 w-3 h-3 cursor-pointer"
+                            />
+                            <span>Use Instant-Save Mode (Base64)</span>
+                          </label>
+                          <span className="text-[9px] text-slate-400 dark:text-gray-500 font-mono italic">
+                            * Recommended: Bypass cloud storage restrictions
+                          </span>
+                        </div>
                         <div 
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => {
@@ -1273,7 +1304,21 @@ export default function AdminPanel() {
                           </div>
 
                           {/* Right Column: Drag & Drop Area */}
-                          <div className="md:col-span-8 flex flex-col justify-center">
+                          <div className="md:col-span-8 flex flex-col justify-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-light-divider dark:border-white/10 pb-1.5 mb-1 bg-black/5 p-1 rounded-lg">
+                              <label className="flex items-center gap-1.5 text-[9px] font-mono font-bold uppercase cursor-pointer select-none text-slate-600 dark:text-slate-350">
+                                <input 
+                                  type="checkbox"
+                                  checked={uploadMode === 'base64'}
+                                  onChange={(e) => setUploadMode(e.target.checked ? 'base64' : 'storage')}
+                                  className="rounded border-slate-300 dark:border-white/10 text-purple-600 focus:ring-purple-500 w-3 h-3 cursor-pointer"
+                                />
+                                <span>Instant-Save Mode (Base64)</span>
+                              </label>
+                              <span className="text-[8px] text-slate-400 dark:text-gray-500 font-mono italic">
+                                * Recommended
+                              </span>
+                            </div>
                             <div 
                               onDragOver={(e) => e.preventDefault()}
                               onDrop={(e) => {
