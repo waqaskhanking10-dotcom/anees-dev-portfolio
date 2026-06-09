@@ -95,7 +95,7 @@ export default function Contact() {
               <div className="space-y-5 pt-4">
                 {/* Email item */}
                 <a 
-                  href="mailto:mylifear2026@gmail.com"
+                  href="mailto:hello@aneescreativelab.com"
                   className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/2 hover:border-purple-500/30 dark:hover:border-purple-500/30 hover:bg-slate-50 dark:hover:bg-white/5 transition-all group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-mono shrink-0">
@@ -103,7 +103,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 dark:text-gray-500 uppercase tracking-wider font-mono font-bold">Email Message</span>
-                    <span className="text-xs text-slate-700 dark:text-gray-300 font-semibold group-hover:text-purple-500 transition-colors">mylifear2026@gmail.com</span>
+                    <span className="text-xs text-slate-700 dark:text-gray-300 font-semibold group-hover:text-purple-500 transition-colors">hello@aneescreativelab.com</span>
                   </div>
                 </a>
 

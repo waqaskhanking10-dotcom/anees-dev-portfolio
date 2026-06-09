@@ -257,12 +257,16 @@ export default function AdminPanel() {
         setAuthError('');
       } else {
         await signOut(auth);
-        setAuthError('Access Denied. Only the whitelisted Administrator (mylifear2026@gmail.com) is permitted root writes.');
+        setAuthError('Access Denied. Only the whitelisted Project Owner Google account is permitted root writes.');
         triggerToast('Whitelisting constraint error', 'error');
       }
     } catch (error: any) {
       console.error('Google Auth Popup Error: ', error);
-      setAuthError(`Google authentication could not complete: ${error.message}`);
+      if (error.code === 'auth/unauthorized-domain' || (error.message && error.message.includes('auth/unauthorized-domain'))) {
+        setAuthError('unauthorized-domain-tutorial');
+      } else {
+        setAuthError(`Google authentication could not complete: ${error.message}`);
+      }
       triggerToast('Authentication fault', 'error');
     }
   };
@@ -529,7 +533,7 @@ export default function AdminPanel() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
                 </svg>
-                <span>Connect via Google (mylifear2026@gmail.com)</span>
+                <span>Connect via Google (Verified Admin)</span>
               </button>
             </div>
 
@@ -560,12 +564,32 @@ export default function AdminPanel() {
                 </p>
               </div>
 
-              {authError && (
+              {authError && authError === 'unauthorized-domain-tutorial' ? (
+                <div className="flex flex-col gap-3.5 p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-slate-800 dark:text-amber-200 text-xs font-sans leading-relaxed">
+                  <div className="flex gap-2 font-bold text-amber-750 dark:text-amber-400 items-center uppercase text-[10px] font-mono tracking-widest">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Firebase Authorized Domains Update Required</span>
+                  </div>
+                  <p>
+                    Google API is secure: ye system tabhi authorization accept karega jab aap safe domain register karenge. Isko theek karna behad aasan hai:
+                  </p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-[11px] font-light">
+                    <li>Apne <strong>Firebase Console</strong> me project select karein.</li>
+                    <li>Sidemenu se <strong>Authentication</strong> &gt; click karein <strong>Settings</strong> (tab) par.</li>
+                    <li>Left-side secondary menu me <strong>Authorized domains</strong> select karein.</li>
+                    <li>Click karein <strong>"Add domain"</strong> par aur ye safe URL host copy/paste karein: <strong className="font-mono bg-amber-550/20 px-1.5 py-0.5 rounded border border-amber-500/30 text-[#D97706] dark:text-[#FBBF24] select-all block mt-1 w-fit">{window.location.hostname}</strong></li>
+                    <li>Domain click to <strong>Add</strong> karein. Done! Sign-in retry karein.</li>
+                  </ol>
+                  <p className="text-[9px] text-slate-500 italic mt-1 font-mono">
+                    Current active hostname: {window.location.hostname}
+                  </p>
+                </div>
+              ) : authError ? (
                 <div className="flex gap-2 p-3.5 rounded-xl bg-rose-500/10 border border-rose-550/20 text-rose-500 text-xs font-mono">
                   <AlertCircle className="w-4.5 h-4.5 shrink-0" />
                   <span>{authError}</span>
                 </div>
-              )}
+              ) : null}
 
               <button
                 type="submit"
@@ -683,7 +707,7 @@ export default function AdminPanel() {
                   Aap abhi simulated passcode se logged in hain. CMS me hone wali koi bhi editing <strong>sirf aapke browser ke LocalStorage me save hogi</strong> aur doosre web visitors ko nazar nahi aegi. Agar aap chahte hain ke shifts real cloud par save hon aur sabhi users ko dynamically update mile, toh kindly <strong>Sign in with Google</strong> kijiye.
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-1 w-full bg-slate-950/40 p-2 rounded border border-white/5">
-                  Verified target administrator account: <span className="text-purple-600 dark:text-purple-400 font-bold font-mono">mylifear2026@gmail.com</span>
+                  Verified target administrator account: <span className="text-purple-600 dark:text-purple-400 font-bold font-mono">m*********@gmail.com</span>
                 </p>
               </div>
             </div>

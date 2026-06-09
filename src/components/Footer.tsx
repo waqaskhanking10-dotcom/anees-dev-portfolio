@@ -72,7 +72,7 @@ export default function Footer() {
               <Linkedin className="w-4 h-4" />
             </a>
             <a
-              href="mailto:mylifear2026@gmail.com"
+              href="mailto:hello@aneescreativelab.com"
               className="w-9 h-9 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0E0E0E] hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white flex items-center justify-center transition-all shadow-sm"
               aria-label="Email Coordinates"
             >
