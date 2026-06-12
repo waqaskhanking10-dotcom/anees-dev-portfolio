@@ -16,6 +16,7 @@ import Contact from './components/Contact';
 import AdminPanel from './components/AdminPanel';
 import FAQ from './components/FAQ';
 import Footer from './components/Footer';
+import CopyLock from './components/CopyLock';
 
 function MainLayout() {
   const { theme } = useTheme();
@@ -101,6 +102,7 @@ export default function App() {
     return (
       <ThemeProvider>
         <AdminPanel />
+        <CopyLock />
       </ThemeProvider>
     );
   }
@@ -108,6 +110,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <MainLayout />
+      <CopyLock />
     </ThemeProvider>
   );
 }

@@ -211,3 +211,89 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
 }
+
+/* ==========================================
+   HIGH-CONTRAST READABILITY & CONTRAST RESOLUTION 
+   ========================================== */
+
+/* Force all low-contrast slate/gray text in Light Mode to readable dark grays */
+div:not(.dark) .text-slate-400,
+div:not(.dark) .text-gray-400,
+div:not(.dark) .text-slate-500,
+div:not(.dark) .text-gray-500,
+div:not(.dark) .text-slate-600,
+div:not(.dark) .text-gray-600 {
+  color: #334155 !important; /* Deep Slate 700 */
+}
+
+div:not(.dark) .text-slate-300,
+div:not(.dark) .text-gray-300,
+div:not(.dark) .text-slate-350 {
+  color: #475569 !important; /* Deep Slate 600 */
+}
+
+/* Deeper, more distinct background cards to pop against standard light slate */
+div:not(.dark) .bg-white\/40,
+div:not(.dark) .bg-white\/50,
+div:not(.dark) .bg-white\/60,
+div:not(.dark) .bg-slate-50\/50,
+div:not(.dark) .bg-slate-100\/50,
+div:not(.dark) .bg-white\/70 {
+  background-color: rgba(255, 255, 255, 0.94) !important; /* Premium clean paper white */
+  border-color: rgba(148, 163, 184, 0.35) !important; /* Faint slate border */
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05) !important;
+}
+
+div:not(.dark) .bg-slate-100,
+div:not(.dark) .bg-slate-50 {
+  background-color: #f1f5f9 !important; /* Distinct Slate 100 for proper depth contrast */
+}
+
+/* Dark Mode pure slate enhancement (Ensures flawless glow card differentiation) */
+.dark .bg-white\/2,
+.dark .bg-white\/5,
+.dark .bg-slate-950\/40,
+.dark .bg-black\/80 {
+  background-color: rgba(6, 6, 8, 0.82) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ==========================================
+   GLASSMORPHISM & TEXT GLOW CUSTOM CLASSES
+   ========================================== */
+
+/* Premium frosted glass template */
+.glass-panel-custom {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.3);
+}
+
+.dark .glass-panel-custom {
+  background: rgba(8, 8, 12, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Glow Text animations */
+.glow-text-purple {
+  text-shadow: 0 0 15px rgba(168, 85, 247, 0.45);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 15px rgba(6, 182, 212, 0.45);
+}
+
+/* Hover-scale card effect */
+.hover-card-trigger {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-card-trigger:hover {
+  transform: translateY(-6px) scale(1.015);
+  box-shadow: 0 20px 40px -10px rgba(139, 92, 246, 0.12);
+}
+

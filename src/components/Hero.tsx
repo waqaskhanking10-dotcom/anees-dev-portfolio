@@ -80,17 +80,19 @@ export default function Hero() {
             variants={itemVariants}
             className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.1] font-display"
           >
-            {hero.name} <br />
+            <span className="dark:glow-text-purple transition-all duration-300">
+              {hero.name}
+            </span> <br />
             <span className="bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-400 bg-clip-text text-transparent animate-gradient-text-fast">
               {hero.title}<br />
-              <span className="text-2xl sm:text-3xl md:text-4xl font-normal text-slate-600 dark:text-gray-400">{hero.subtitle}</span>
+              <span className="text-2xl sm:text-3xl md:text-4xl font-normal text-slate-800 dark:text-gray-300 dark:glow-text-cyan">{hero.subtitle}</span>
             </span>
           </motion.h1>
 
           {/* Subheading Tagline */}
           <motion.p
             variants={itemVariants}
-            className="text-base sm:text-lg text-slate-600 dark:text-gray-400 max-w-xl leading-relaxed font-light"
+            className="text-base sm:text-lg text-slate-750 dark:text-gray-300 max-w-xl leading-relaxed font-light"
           >
             {hero.tagline}
           </motion.p>
@@ -111,9 +113,9 @@ export default function Hero() {
 
             <a
               href={hero.ctaLinkSecondary}
-              className="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white bg-white/40 dark:bg-white/5 hover:bg-white/90 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm backdrop-blur-md transition-all duration-200 hover:scale-[1.03] cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl text-sm font-semibold text-slate-900 dark:text-white bg-white/60 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-slate-300 dark:border-white/10 shadow-sm backdrop-blur-md transition-all duration-200 hover:scale-[1.03] glass-panel-custom cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              <MessageSquare className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               <span>{hero.ctaTextSecondary}</span>
             </a>
           </motion.div>
